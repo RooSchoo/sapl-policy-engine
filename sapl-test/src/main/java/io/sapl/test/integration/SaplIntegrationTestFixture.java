@@ -16,6 +16,7 @@
 package io.sapl.test.integration;
 
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -31,12 +32,20 @@ import io.sapl.test.coverage.api.CoverageAPIFactory;
 import io.sapl.test.lang.TestSaplInterpreter;
 import io.sapl.test.steps.GivenStep;
 import io.sapl.test.steps.WhenStep;
+import java.util.Objects;
 
 public class SaplIntegrationTestFixture extends SaplTestFixtureTemplate {
 
-    private static final String ERROR_MESSAGE_POLICY_PATH_NULL = "Null is not allowed for the Path pointing to the policies folder.";
+    private static final String ERROR_MESSAGE_POLICY_FOLDER_PATH_NULL = "Null is not allowed for the Path pointing to the policies folder.";
+    private static final String ERROR_MESSAGE_POLICY_PATHS_NULL_OR_SINGLE_VALUE = "List of policies paths needs to contain at least 2 values.";
 
     private final String pathToPoliciesFolder;
+
+    private final List<String> policyPaths;
+
+    private final String pdpConfigPath;
+
+    private final boolean usePolicyFolder;
 
     private PolicyDocumentCombiningAlgorithm pdpAlgorithm = null;
 
@@ -44,20 +53,30 @@ public class SaplIntegrationTestFixture extends SaplTestFixtureTemplate {
 
     /**
      * Fixture for constructing an integration test case
-     * 
+     *
      * @param policyPath path relative to your class path (relative from
      *                   src/main/resources, ...) to the folder containing the SAPL
      *                   documents. If your policies are located at
      *                   src/main/resources/yourSpecialDirectory you only have to
      *                   specify "yourSpecialDirectory".
      */
-    public SaplIntegrationTestFixture(String policyPath) {
+    public SaplIntegrationTestFixture(final String policyPath) {
         this.pathToPoliciesFolder = policyPath;
+        this.pdpConfigPath = policyPath;
+        this.policyPaths = null;
+        this.usePolicyFolder = true;
+    }
+
+    public SaplIntegrationTestFixture(final String pdpConfigPath, final List<String> policyPaths) {
+        this.policyPaths = policyPaths;
+        this.pdpConfigPath = pdpConfigPath;
+        this.pathToPoliciesFolder = null;
+        this.usePolicyFolder = false;
     }
 
     /**
      * set {@link PolicyDocumentCombiningAlgorithm} for this policy integration test
-     * 
+     *
      * @param alg the {@link PolicyDocumentCombiningAlgorithm} to be used
      * @return the test fixture
      */
@@ -68,7 +87,7 @@ public class SaplIntegrationTestFixture extends SaplTestFixtureTemplate {
 
     /**
      * set the Variables-{@link Map} normally loaded from the pdp.json file
-     * 
+     *
      * @param variables a {@link Map} of variables
      * @return the test fixture
      */
@@ -80,7 +99,7 @@ public class SaplIntegrationTestFixture extends SaplTestFixtureTemplate {
     @Override
     public GivenStep constructTestCaseWithMocks() {
         if (this.pathToPoliciesFolder == null || this.pathToPoliciesFolder.isEmpty()) {
-            throw new SaplTestException(ERROR_MESSAGE_POLICY_PATH_NULL);
+            throw new SaplTestException(ERROR_MESSAGE_POLICY_FOLDER_PATH_NULL);
         }
         return StepBuilder.newBuilderAtGivenStep(constructPRP(), constructPDPConfig(), this.attributeCtx,
                 this.functionCtx, this.variables);
@@ -89,22 +108,37 @@ public class SaplIntegrationTestFixture extends SaplTestFixtureTemplate {
     @Override
     public WhenStep constructTestCase() {
         if (this.pathToPoliciesFolder == null || this.pathToPoliciesFolder.isEmpty()) {
-            throw new SaplTestException(ERROR_MESSAGE_POLICY_PATH_NULL);
+            throw new SaplTestException(ERROR_MESSAGE_POLICY_FOLDER_PATH_NULL);
         }
         return StepBuilder.newBuilderAtWhenStep(constructPRP(), constructPDPConfig(), this.attributeCtx,
                 this.functionCtx, this.variables);
     }
 
     private PolicyRetrievalPoint constructPRP() {
+        final var interpreter = getSaplInterpreter();
 
-        SAPLInterpreter interpreter = new TestSaplInterpreter(
+        if(usePolicyFolder) {
+            if(pathToPoliciesFolder == null || pathToPoliciesFolder.isEmpty()) {
+                throw new SaplTestException(ERROR_MESSAGE_POLICY_FOLDER_PATH_NULL);
+            }
+            return new ClasspathPolicyRetrievalPoint(Paths.get(pathToPoliciesFolder), interpreter);
+        } else {
+            if(this.policyPaths == null || this.policyPaths.size() < 2) {
+                throw new SaplTestException(ERROR_MESSAGE_POLICY_PATHS_NULL_OR_SINGLE_VALUE);
+            }
+            return new ClasspathPolicyRetrievalPoint(policyPaths, interpreter);
+        }
+    }
+
+    private SAPLInterpreter getSaplInterpreter() {
+        return new TestSaplInterpreter(
                 CoverageAPIFactory.constructCoverageHitRecorder(resolveCoverageBaseDir()));
-        return new ClasspathPolicyRetrievalPoint(Paths.get(this.pathToPoliciesFolder), interpreter);
     }
 
     private VariablesAndCombinatorSource constructPDPConfig() {
+        final var actualConfigPath = Objects.requireNonNullElse(this.pdpConfigPath, "");
 
-        return new ClasspathVariablesAndCombinatorSource(this.pathToPoliciesFolder, new ObjectMapper(),
+        return new ClasspathVariablesAndCombinatorSource(actualConfigPath, new ObjectMapper(),
                 this.pdpAlgorithm, this.pdpVariables);
     }
 
