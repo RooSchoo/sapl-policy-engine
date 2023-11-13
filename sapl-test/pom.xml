@@ -75,6 +75,7 @@
 		<dependency>
 			<groupId>com.spotify</groupId>
 			<artifactId>hamcrest-jackson</artifactId>
+			<scope>provided</scope>
 		</dependency>
 
 		<!-- Logging -->
